@@ -17,6 +17,7 @@ export const noteService = {
       .from('notes')
       .select('*')
       .eq('user_id', userId)
+      .order('is_pinned', { ascending: false })
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -49,6 +50,8 @@ export const noteService = {
       .insert({
         title: input.title ? input.title.trim() : 'Untitled Note',
         content: input.content ?? '',
+        is_pinned: input.is_pinned ?? false,
+        category: input.category?.trim() || 'General',
         user_id: userId,
       })
       .select()
@@ -66,6 +69,8 @@ export const noteService = {
 
     if (updates.title !== undefined) updatePayload.title = updates.title.trim();
     if (updates.content !== undefined) updatePayload.content = updates.content;
+    if (updates.is_pinned !== undefined) updatePayload.is_pinned = updates.is_pinned;
+    if (updates.category !== undefined) updatePayload.category = updates.category.trim() || 'General';
 
     const { data, error } = await supabase
       .from('notes')
@@ -79,6 +84,10 @@ export const noteService = {
       throw error;
     }
     return data as Note;
+  },
+
+  async togglePin(id: string, currentPinned: boolean): Promise<Note> {
+    return this.updateNote(id, { is_pinned: !currentPinned });
   },
 
   async deleteNote(id: string): Promise<void> {

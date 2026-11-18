@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { configStatus } from '../services/supabase';
+import { loadAppState } from '../utils/appStateStorage';
 import { Calendar, AlertCircle, Loader2, Mail } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -13,14 +14,16 @@ export const LoginPage: React.FC = () => {
   const [isResending, setIsResending] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
 
-  const { session, loading, signIn, resendConfirmationEmail } = useAuth();
+  const { session, loading, sessionExpired, signIn, resendConfirmationEmail } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+  const stateFrom = (location.state as { from?: { pathname: string; search?: string } })?.from;
+  const fromPath = stateFrom ? `${stateFrom.pathname}${stateFrom.search || ''}` : null;
 
   if (!loading && session) {
-    return <Navigate to={from} replace />;
+    const target = fromPath || loadAppState(session.user.id).lastRoute || '/dashboard';
+    return <Navigate to={target} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,7 +40,7 @@ export const LoginPage: React.FC = () => {
     try {
       setIsSubmitting(true);
       await signIn(email.trim(), password);
-      navigate(from, { replace: true });
+      navigate(fromPath || '/', { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please check your credentials.';
       if (msg.toLowerCase().includes('email not confirmed')) {
@@ -92,6 +95,13 @@ export const LoginPage: React.FC = () => {
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-amber-800 text-sm">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <span>{configStatus.error}</span>
+            </div>
+          )}
+
+          {sessionExpired && !formError && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-amber-800 text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>Your session has expired. Please sign in again to continue where you left off.</span>
             </div>
           )}
 

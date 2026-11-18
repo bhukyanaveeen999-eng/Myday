@@ -6,6 +6,7 @@ import { ConfirmationModal } from '../components/ConfirmationModal';
 import { DatePicker } from '../components/DatePicker';
 import { TimePicker } from '../components/TimePicker';
 import { formatDateTime, toInputDate, toInputTime, combineDateAndTime } from '../utils/dateUtils';
+import { computeSnoozeUntilIso } from '../utils/reminderScheduler';
 import { Plus, CheckSquare, Clock, AlertCircle, Trash2, Edit2, Loader2, X } from 'lucide-react';
 
 function parseStatusParam(param: string | null): TaskStatus | 'all' {
@@ -21,10 +22,33 @@ export const TasksPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const statusFilter = parseStatusParam(searchParams.get('status'));
+  const highlightedReminderId = searchParams.get('reminder');
+  const reminderAction = searchParams.get('action');
 
   const handleFilterChange = (filter: TaskStatus | 'all') => {
     setSearchParams(filter === 'all' ? {} : { status: filter }, { replace: true });
   };
+
+  // Handle notification click actions (?reminder=<id>&action=snooze|dismiss)
+  useEffect(() => {
+    if (!highlightedReminderId || !reminderAction) return;
+    const run = async () => {
+      try {
+        if (reminderAction === 'snooze') {
+          await taskService.snoozeTaskReminder(highlightedReminderId, computeSnoozeUntilIso());
+        } else if (reminderAction === 'dismiss') {
+          await taskService.dismissTaskReminder(highlightedReminderId);
+        }
+      } catch {
+        // Ignore if task no longer exists
+      } finally {
+        const next = new URLSearchParams(searchParams);
+        next.delete('action');
+        setSearchParams(next, { replace: true });
+      }
+    };
+    void run();
+  }, [highlightedReminderId, reminderAction, searchParams, setSearchParams]);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -260,7 +284,11 @@ export const TasksPage: React.FC = () => {
           tasks.map((task) => (
             <div
               key={task.id}
-              className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 transition-colors"
+              className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                highlightedReminderId === task.id
+                  ? 'bg-blue-50/70 ring-1 ring-inset ring-blue-300'
+                  : 'hover:bg-gray-50'
+              }`}
             >
               {/* Checkbox and Content */}
               <div className="flex items-start gap-3 min-w-0">

@@ -1,6 +1,14 @@
 import { supabase } from './supabase';
 import type { Database, Task, CreateTaskInput, UpdateTaskInput, TaskStatus, TaskSummary } from '../types/database.types';
 
+export const TASKS_UPDATED_EVENT = 'myday:tasks-updated';
+
+function emitTasksUpdated(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(TASKS_UPDATED_EVENT));
+  }
+}
+
 async function requireCurrentUserId(): Promise<string> {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) {
@@ -59,6 +67,8 @@ export const taskService = {
         timezone: input.timezone || 'Asia/Kolkata',
         priority: input.priority || 'medium',
         status: input.status || 'pending',
+        snoozed_until: null,
+        reminder_dismissed: false,
         user_id: userId,
       })
       .select()
@@ -67,6 +77,7 @@ export const taskService = {
     if (error) {
       throw error;
     }
+    emitTasksUpdated();
     return data as Task;
   },
 
@@ -76,10 +87,26 @@ export const taskService = {
 
     if (updates.title !== undefined) updatePayload.title = updates.title.trim();
     if (updates.description !== undefined) updatePayload.description = updates.description;
-    if (updates.scheduled_at !== undefined) updatePayload.scheduled_at = updates.scheduled_at;
+    if (updates.scheduled_at !== undefined) {
+      updatePayload.scheduled_at = updates.scheduled_at;
+      // Rescheduling a task resets snooze & dismissal so the new reminder triggers cleanly
+      if (updates.snoozed_until === undefined) updatePayload.snoozed_until = null;
+      if (updates.reminder_dismissed === undefined) updatePayload.reminder_dismissed = false;
+    }
     if (updates.timezone !== undefined) updatePayload.timezone = updates.timezone;
     if (updates.priority !== undefined) updatePayload.priority = updates.priority;
-    if (updates.status !== undefined) updatePayload.status = updates.status;
+    if (updates.status !== undefined) {
+      updatePayload.status = updates.status;
+      if (updates.status === 'completed' || updates.status === 'cancelled') {
+        updatePayload.snoozed_until = null;
+        updatePayload.reminder_dismissed = true;
+      } else if (updates.status === 'pending' && updates.reminder_dismissed === undefined) {
+        updatePayload.reminder_dismissed = false;
+      }
+    }
+    if (updates.snoozed_until !== undefined) updatePayload.snoozed_until = updates.snoozed_until;
+    if (updates.last_reminded_at !== undefined) updatePayload.last_reminded_at = updates.last_reminded_at;
+    if (updates.reminder_dismissed !== undefined) updatePayload.reminder_dismissed = updates.reminder_dismissed;
 
     const { data, error } = await supabase
       .from('tasks')
@@ -92,7 +119,24 @@ export const taskService = {
     if (error) {
       throw error;
     }
+    emitTasksUpdated();
     return data as Task;
+  },
+
+  async snoozeTaskReminder(id: string, snoozedUntilIso: string): Promise<Task> {
+    return this.updateTask(id, {
+      snoozed_until: snoozedUntilIso,
+      reminder_dismissed: false,
+      last_reminded_at: new Date().toISOString(),
+    });
+  },
+
+  async dismissTaskReminder(id: string): Promise<Task> {
+    return this.updateTask(id, {
+      snoozed_until: null,
+      reminder_dismissed: true,
+      last_reminded_at: new Date().toISOString(),
+    });
   },
 
   async deleteTask(id: string): Promise<void> {
@@ -107,6 +151,7 @@ export const taskService = {
     if (error) {
       throw error;
     }
+    emitTasksUpdated();
   },
 
   async toggleTaskStatus(id: string, currentStatus: TaskStatus): Promise<Task> {

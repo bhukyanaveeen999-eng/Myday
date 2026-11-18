@@ -1,6 +1,8 @@
 export interface NoteDraft {
   title: string;
   content: string;
+  category?: string;
+  isPinned?: boolean;
   savedAt: string;
 }
 
@@ -28,6 +30,8 @@ export function loadNoteDraft(userId: string | undefined, draftId: string): Note
     return {
       title,
       content,
+      category: typeof parsed.category === 'string' ? parsed.category : undefined,
+      isPinned: typeof parsed.isPinned === 'boolean' ? parsed.isPinned : undefined,
       savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date().toISOString(),
     };
   } catch {
@@ -39,7 +43,8 @@ export function saveNoteDraft(
   userId: string | undefined,
   draftId: string,
   title: string,
-  content: string
+  content: string,
+  meta?: { category?: string; isPinned?: boolean }
 ): NoteDraft | null {
   if (!userId) return null;
   try {
@@ -50,6 +55,8 @@ export function saveNoteDraft(
     const draft: NoteDraft = {
       title,
       content,
+      category: meta?.category,
+      isPinned: meta?.isPinned,
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(getStorageKey(userId, draftId), JSON.stringify(draft));

@@ -1,14 +1,41 @@
-import React, { useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, CheckSquare, FileText, LogOut, Menu, X, Calendar } from 'lucide-react';
+import {
+  LayoutDashboard,
+  CheckSquare,
+  FileText,
+  Settings,
+  Bell,
+  BellOff,
+  LogOut,
+  Menu,
+  X,
+  Calendar,
+  Download,
+  WifiOff,
+} from 'lucide-react';
 import { useSupabaseConnection } from '../hooks/useSupabaseConnection';
+import { usePwaInstall } from '../hooks/usePwaInstall';
+import { useReminders } from '../context/ReminderContext';
+import { updateAppState } from '../utils/appStateStorage';
 
 export const AppLayout: React.FC = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const connection = useSupabaseConnection();
+  const { canInstall, promptInstall, isOnline } = usePwaInstall();
+  const { preferences, activeQueue } = useReminders();
+
+  // Persist last visited section so closing and reopening MyDay returns where the user left off
+  useEffect(() => {
+    if (user?.id) {
+      const fullPath = `${location.pathname}${location.search || ''}`;
+      updateAppState(user.id, { lastRoute: fullPath });
+    }
+  }, [user?.id, location.pathname, location.search]);
 
   const handleLogout = async () => {
     try {
@@ -23,12 +50,21 @@ export const AppLayout: React.FC = () => {
     { name: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
     { name: 'Tasks', to: '/tasks', icon: CheckSquare },
     { name: 'Notes', to: '/notes', icon: FileText },
+    { name: 'Settings', to: '/settings', icon: Settings },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top Warning Banner if Supabase is unconfigured or unreachable */}
-      {(!connection.isConfigured || connection.isReachable === false) && (
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="bg-slate-800 text-white px-4 py-1.5 text-xs text-center flex items-center justify-center gap-2">
+          <WifiOff className="w-3.5 h-3.5 shrink-0" />
+          <span>You are offline. Cached app shell is active; local note drafts are still saved on this device.</span>
+        </div>
+      )}
+
+      {/* Top Warning Banner if Supabase is unconfigured or unreachable while online */}
+      {isOnline && (!connection.isConfigured || connection.isReachable === false) && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 text-center font-medium">
           {!connection.isConfigured
             ? 'Supabase credentials are not configured in .env. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
@@ -72,7 +108,37 @@ export const AppLayout: React.FC = () => {
             </div>
 
             {/* Desktop User Section */}
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-3">
+              <NavLink
+                to="/settings"
+                title={
+                  preferences.enabled
+                    ? `Reminders active (${preferences.mode})`
+                    : 'Reminders paused'
+                }
+                className="relative p-1.5 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                aria-label="Notification settings"
+              >
+                {preferences.enabled ? (
+                  <Bell className="w-4 h-4 text-blue-600" />
+                ) : (
+                  <BellOff className="w-4 h-4 text-gray-400" />
+                )}
+                {activeQueue.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white" />
+                )}
+              </NavLink>
+              {canInstall && (
+                <button
+                  type="button"
+                  onClick={promptInstall}
+                  className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+                  title="Install MyDay app"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1" />
+                  Install App
+                </button>
+              )}
               <span className="text-xs text-gray-500 max-w-[220px] truncate" title={user?.email}>
                 {user?.email}
               </span>
@@ -88,7 +154,18 @@ export const AppLayout: React.FC = () => {
             </div>
 
             {/* Mobile Menu Button */}
-            <div className="md:hidden flex items-center">
+            <div className="md:hidden flex items-center gap-1.5">
+              {canInstall && (
+                <button
+                  type="button"
+                  onClick={promptInstall}
+                  className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded"
+                  title="Install MyDay app"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1" />
+                  Install
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

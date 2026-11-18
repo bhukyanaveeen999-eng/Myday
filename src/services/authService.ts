@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Session, User, AuthResponse } from '@supabase/supabase-js';
+import type { Session, User, AuthResponse, AuthChangeEvent } from '@supabase/supabase-js';
 
 function getEmailRedirectUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -59,6 +59,24 @@ export const authService = {
     return data.session;
   },
 
+  async refreshSession(): Promise<{ session: Session | null; expired: boolean }> {
+    const { data: current } = await supabase.auth.getSession();
+    if (!current.session) {
+      return { session: null, expired: false };
+    }
+    // Refresh if token expires within 2 minutes
+    const expiresAt = current.session.expires_at ?? 0;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (expiresAt - nowSeconds > 120) {
+      return { session: current.session, expired: false };
+    }
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) {
+      return { session: null, expired: true };
+    }
+    return { session: data.session, expired: false };
+  },
+
   async getUser(): Promise<User | null> {
     const { data, error } = await supabase.auth.getUser();
     if (error) {
@@ -67,9 +85,11 @@ export const authService = {
     return data.user;
   },
 
-  onAuthStateChange(callback: (session: Session | null, user: User | null) => void) {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      callback(session, session?.user ?? null);
+  onAuthStateChange(
+    callback: (event: AuthChangeEvent, session: Session | null, user: User | null) => void
+  ) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      callback(event, session, session?.user ?? null);
     });
     return subscription;
   },

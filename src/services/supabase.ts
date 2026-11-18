@@ -146,5 +146,7 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(clientU
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storageKey: 'myday-auth-session',
+    flowType: 'pkce',
   },
 });
