@@ -2,17 +2,18 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LayoutDashboard, CheckSquare, FileText, LogOut, Menu, X, Calendar } from 'lucide-react';
-import { isConfigured } from '../services/supabase';
+import { useSupabaseConnection } from '../hooks/useSupabaseConnection';
 
 export const AppLayout: React.FC = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const connection = useSupabaseConnection();
 
   const handleLogout = async () => {
     try {
       await signOut();
-      navigate('/login');
+      navigate('/login', { replace: true });
     } catch (err) {
       console.error('Logout error:', err);
     }
@@ -26,10 +27,12 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top Warning Banner if Supabase URL is placeholder */}
-      {!isConfigured && (
+      {/* Top Warning Banner if Supabase is unconfigured or unreachable */}
+      {(!connection.isConfigured || connection.isReachable === false) && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 text-center font-medium">
-          Note: Supabase credentials are not yet configured in .env. Connect your project using Supabase CLI or update .env with your project credentials.
+          {!connection.isConfigured
+            ? 'Supabase credentials are not configured in .env. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
+            : `Supabase connection warning: ${connection.error || 'Unable to reach Supabase Auth endpoint.'}`}
         </div>
       )}
 
@@ -70,7 +73,7 @@ export const AppLayout: React.FC = () => {
 
             {/* Desktop User Section */}
             <div className="hidden md:flex items-center gap-4">
-              <span className="text-xs text-gray-500 max-w-[200px] truncate" title={user?.email}>
+              <span className="text-xs text-gray-500 max-w-[220px] truncate" title={user?.email}>
                 {user?.email}
               </span>
               <button
@@ -141,9 +144,9 @@ export const AppLayout: React.FC = () => {
         )}
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Content Area — keyed by user?.id so switching accounts never leaks in-memory state */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Outlet />
+        <Outlet key={user?.id} />
       </main>
 
       {/* Mobile Bottom Navigation Bar for Android / Touch devices */}

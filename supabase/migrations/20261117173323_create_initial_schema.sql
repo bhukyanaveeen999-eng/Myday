@@ -110,3 +110,4 @@ CREATE POLICY "Users can delete own notes"
     ON public.notes
     FOR DELETE
     USING (auth.uid() = user_id);
+

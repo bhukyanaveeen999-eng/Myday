@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { taskService } from '../services/taskService';
-import type { Task, TaskSummary } from '../types/database.types';
-import { formatDateTime } from '../utils/dateUtils';
+import type { Task, TaskPriority, TaskSummary } from '../types/database.types';
+import { combineDateAndTime, formatDateTime } from '../utils/dateUtils';
+import { DatePicker } from '../components/DatePicker';
+import { TimePicker } from '../components/TimePicker';
 import { CheckSquare, Clock, CheckCircle2, ListTodo, Plus, Calendar, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
@@ -15,6 +17,14 @@ export const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+
+  // Quick Task Creation state
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickDate, setQuickDate] = useState('');
+  const [quickTime, setQuickTime] = useState('');
+  const [quickPriority, setQuickPriority] = useState<TaskPriority>('medium');
+  const [isCreatingQuick, setIsCreatingQuick] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
 
   const fetchSummary = async () => {
     try {
@@ -33,6 +43,48 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     fetchSummary();
   }, []);
+
+  const handleQuickCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setQuickError(null);
+
+    if (!quickTitle.trim()) {
+      setQuickError('Please enter a task title.');
+      return;
+    }
+
+    // If time is chosen without a date, default to today's date
+    let effectiveDate = quickDate;
+    if (!effectiveDate && quickTime) {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      effectiveDate = `${yyyy}-${mm}-${dd}`;
+    }
+
+    try {
+      setIsCreatingQuick(true);
+      await taskService.createTask({
+        title: quickTitle.trim(),
+        description: null,
+        scheduled_at: effectiveDate ? combineDateAndTime(effectiveDate, quickTime) : null,
+        priority: quickPriority,
+        status: 'pending',
+        timezone: 'Asia/Kolkata',
+      });
+      setQuickTitle('');
+      setQuickDate('');
+      setQuickTime('');
+      setQuickPriority('medium');
+      await fetchSummary();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create task.';
+      setQuickError(msg);
+    } finally {
+      setIsCreatingQuick(false);
+    }
+  };
 
   const handleToggleTask = async (task: Task) => {
     try {
@@ -60,8 +112,8 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header & Quick Actions */}
+    <div className="space-y-6 pb-16 md:pb-12">
+      {/* Header & Navigation Shortcuts */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -73,7 +125,7 @@ export const DashboardPage: React.FC = () => {
             className="inline-flex items-center px-3.5 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4 mr-1.5" />
-            New Task
+            Manage Tasks
           </Link>
           <Link
             to="/notes"
@@ -101,46 +153,119 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Metrics Grid */}
+      {/* Clickable Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Total Tasks */}
-        <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between">
+        <Link
+          to="/tasks?status=all"
+          className="bg-white p-5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between hover:border-blue-400 hover:shadow-sm transition-all group cursor-pointer"
+        >
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Tasks</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {loading ? '-' : summary.total}
             </p>
+            <p className="mt-1 text-xs text-blue-600 flex items-center gap-1 opacity-80 group-hover:opacity-100">
+              View all <ArrowRight className="w-3 h-3" />
+            </p>
           </div>
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100 transition-colors">
             <ListTodo className="w-6 h-6" />
           </div>
-        </div>
+        </Link>
 
         {/* Pending Tasks */}
-        <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between">
+        <Link
+          to="/tasks?status=pending"
+          className="bg-white p-5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between hover:border-amber-400 hover:shadow-sm transition-all group cursor-pointer"
+        >
           <div>
             <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Pending</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {loading ? '-' : summary.pending}
             </p>
+            <p className="mt-1 text-xs text-amber-600 flex items-center gap-1 opacity-80 group-hover:opacity-100">
+              View pending <ArrowRight className="w-3 h-3" />
+            </p>
           </div>
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-lg">
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-100 transition-colors">
             <Clock className="w-6 h-6" />
           </div>
-        </div>
+        </Link>
 
         {/* Completed Tasks */}
-        <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between">
+        <Link
+          to="/tasks?status=completed"
+          className="bg-white p-5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between hover:border-green-400 hover:shadow-sm transition-all group cursor-pointer"
+        >
           <div>
             <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Completed</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {loading ? '-' : summary.completed}
             </p>
+            <p className="mt-1 text-xs text-green-600 flex items-center gap-1 opacity-80 group-hover:opacity-100">
+              View completed <ArrowRight className="w-3 h-3" />
+            </p>
           </div>
-          <div className="p-3 bg-green-50 text-green-600 rounded-lg">
+          <div className="p-3 bg-green-50 text-green-600 rounded-lg group-hover:bg-green-100 transition-colors">
             <CheckCircle2 className="w-6 h-6" />
           </div>
-        </div>
+        </Link>
+      </div>
+
+      {/* Quick Task Creation */}
+      <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-xs">
+        <h2 className="text-sm font-semibold text-gray-900 mb-3">Quick Add Task</h2>
+        {quickError && (
+          <div className="mb-3 p-2.5 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+            {quickError}
+          </div>
+        )}
+        <form onSubmit={handleQuickCreate} className="space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <input
+              type="text"
+              value={quickTitle}
+              onChange={(e) => setQuickTitle(e.target.value)}
+              placeholder="What needs to be done?"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select
+              value={quickPriority}
+              onChange={(e) => setQuickPriority(e.target.value as TaskPriority)}
+              aria-label="Task priority"
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="low">Low Priority</option>
+              <option value="medium">Medium Priority</option>
+              <option value="high">High Priority</option>
+            </select>
+            <button
+              type="submit"
+              disabled={isCreatingQuick}
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
+            >
+              {isCreatingQuick ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add
+                </>
+              )}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-600">Date:</label>
+              <DatePicker value={quickDate} onChange={setQuickDate} compact />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-600">Time:</label>
+              <TimePicker value={quickTime} onChange={setQuickTime} compact />
+            </div>
+          </div>
+        </form>
       </div>
 
       {/* Upcoming Scheduled Tasks */}
@@ -151,7 +276,7 @@ export const DashboardPage: React.FC = () => {
             <h2 className="text-base font-semibold text-gray-900">Upcoming & Pending Tasks</h2>
           </div>
           <Link
-            to="/tasks"
+            to="/tasks?status=pending"
             className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
           >
             View all
@@ -169,13 +294,7 @@ export const DashboardPage: React.FC = () => {
             <div className="p-8 text-center text-gray-500">
               <CheckSquare className="w-8 h-8 mx-auto text-gray-400 mb-2" />
               <p className="text-sm font-medium text-gray-700">No pending tasks!</p>
-              <p className="text-xs text-gray-400 mt-1">You are all caught up for today.</p>
-              <Link
-                to="/tasks"
-                className="mt-3 inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
-              >
-                Create your first task
-              </Link>
+              <p className="text-xs text-gray-400 mt-1">You are all caught up for today. Use Quick Add above to create one.</p>
             </div>
           ) : (
             summary.upcoming.map((task) => (

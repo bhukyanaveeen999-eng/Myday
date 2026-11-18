@@ -69,3 +69,4 @@ test('Triggers for updated_at timestamps are defined', () => {
   assert.match(sql, /CREATE\s+TRIGGER\s+set_tasks_updated_at/i);
   assert.match(sql, /CREATE\s+TRIGGER\s+set_notes_updated_at/i);
 });
+

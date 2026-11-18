@@ -1,15 +1,30 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { taskService } from '../services/taskService';
 import type { Task, CreateTaskInput, UpdateTaskInput, TaskPriority, TaskStatus } from '../types/database.types';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { DatePicker } from '../components/DatePicker';
+import { TimePicker } from '../components/TimePicker';
 import { formatDateTime, toInputDate, toInputTime, combineDateAndTime } from '../utils/dateUtils';
 import { Plus, CheckSquare, Clock, AlertCircle, Trash2, Edit2, Loader2, X } from 'lucide-react';
 
+function parseStatusParam(param: string | null): TaskStatus | 'all' {
+  if (param === 'pending' || param === 'completed' || param === 'all') {
+    return param;
+  }
+  return 'all';
+}
+
 export const TasksPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
+  const statusFilter = parseStatusParam(searchParams.get('status'));
+
+  const handleFilterChange = (filter: TaskStatus | 'all') => {
+    setSearchParams(filter === 'all' ? {} : { status: filter }, { replace: true });
+  };
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -83,7 +98,16 @@ export const TasksPage: React.FC = () => {
       return;
     }
 
-    const scheduledIso = scheduledDate ? combineDateAndTime(scheduledDate, scheduledTime) : null;
+    let effectiveDate = scheduledDate;
+    if (!effectiveDate && scheduledTime) {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      effectiveDate = `${yyyy}-${mm}-${dd}`;
+    }
+
+    const scheduledIso = effectiveDate ? combineDateAndTime(effectiveDate, scheduledTime) : null;
 
     try {
       setIsSubmitting(true);
@@ -195,14 +219,14 @@ export const TasksPage: React.FC = () => {
           <button
             key={filter}
             type="button"
-            onClick={() => setStatusFilter(filter)}
+            onClick={() => handleFilterChange(filter)}
             className={`pb-2.5 px-1 text-sm font-medium capitalize border-b-2 transition-colors ${
               statusFilter === filter
                 ? 'border-blue-600 text-blue-600 font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            {filter} {filter === 'all' ? `(${tasks.length})` : ''}
+            {filter} {statusFilter === filter ? `(${tasks.length})` : ''}
           </button>
         ))}
       </div>
@@ -364,28 +388,18 @@ export const TasksPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Scheduled Date
                   </label>
-                  <input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    className="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded-md shadow-2xs text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <DatePicker value={scheduledDate} onChange={setScheduledDate} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Scheduled Time
                   </label>
-                  <input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={(e) => setScheduledTime(e.target.value)}
-                    className="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded-md shadow-2xs text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <TimePicker value={scheduledTime} onChange={setScheduledTime} />
                 </div>
               </div>
 
@@ -441,3 +455,4 @@ export const TasksPage: React.FC = () => {
     </div>
   );
 };
+

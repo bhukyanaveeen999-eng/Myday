@@ -1,23 +1,33 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, AlertCircle, Loader2 } from 'lucide-react';
+import { configStatus } from '../services/supabase';
+import { Calendar, AlertCircle, Loader2, Mail } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
-  const { signIn } = useAuth();
+  const { session, loading, signIn, resendConfirmationEmail } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
+  if (!loading && session) {
+    return <Navigate to={from} replace />;
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setNeedsConfirmation(false);
+    setResendMessage(null);
 
     if (!email.trim() || !password) {
       setFormError('Please enter both email and password.');
@@ -30,9 +40,34 @@ export const LoginPage: React.FC = () => {
       navigate(from, { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please check your credentials.';
-      setFormError(msg);
+      if (msg.toLowerCase().includes('email not confirmed')) {
+        setNeedsConfirmation(true);
+        setFormError(
+          'Your email address has not been confirmed yet. Check your Inbox/Spam folder, resend the confirmation email below, or confirm this user in Supabase Dashboard → Authentication → Users.'
+        );
+      } else {
+        setFormError(msg);
+      }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) return;
+    setResendMessage(null);
+    try {
+      setIsResending(true);
+      await resendConfirmationEmail(trimmedEmail);
+      setResendMessage(
+        'Confirmation email resent! Check Inbox, Spam, and Promotions folders.'
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not resend confirmation email.';
+      setFormError(msg);
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -53,10 +88,39 @@ export const LoginPage: React.FC = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow-sm border border-gray-200 sm:rounded-lg sm:px-10">
-          {formError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2 text-red-700 text-sm">
+          {!configStatus.isValid && configStatus.error && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-amber-800 text-sm">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{formError}</span>
+              <span>{configStatus.error}</span>
+            </div>
+          )}
+
+          {formError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md space-y-2 text-red-700 text-sm">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{formError}</span>
+              </div>
+              {needsConfirmation && email.trim() && (
+                <div className="pl-6">
+                  <button
+                    type="button"
+                    disabled={isResending}
+                    onClick={handleResend}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-800 bg-white border border-red-300 rounded hover:bg-red-100 disabled:opacity-50"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    {isResending ? 'Sending confirmation email...' : 'Resend confirmation email'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {resendMessage && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md flex items-start gap-2 text-blue-800 text-xs">
+              <Mail className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{resendMessage}</span>
             </div>
           )}
 
@@ -119,7 +183,7 @@ export const LoginPage: React.FC = () => {
 
           <div className="mt-6 border-t border-gray-200 pt-4 text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
                 Sign up
               </Link>

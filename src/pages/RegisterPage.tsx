@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { configStatus } from '../services/supabase';
+import { Calendar, AlertCircle, CheckCircle, Loader2, Mail } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -10,14 +11,23 @@ export const RegisterPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
-  const { signUp } = useAuth();
+  const { session, loading, signUp, resendConfirmationEmail } = useAuth();
   const navigate = useNavigate();
+
+  if (!loading && session) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     setSuccessMessage(null);
+    setResendMessage(null);
+    setPendingConfirmationEmail(null);
 
     if (!email.trim() || !password) {
       setFormError('Please fill in all required fields.');
@@ -36,16 +46,48 @@ export const RegisterPage: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      await signUp(email.trim(), password);
-      setSuccessMessage('Registration successful! Redirecting to dashboard...');
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 1500);
+      const trimmedEmail = email.trim();
+      const { requiresEmailConfirmation, alreadyRegistered } = await signUp(trimmedEmail, password);
+
+      if (alreadyRegistered) {
+        setFormError(
+          'An account with this email may already exist. Try signing in, or resend the confirmation email if you never confirmed it.'
+        );
+        setPendingConfirmationEmail(trimmedEmail);
+      } else if (requiresEmailConfirmation) {
+        setPendingConfirmationEmail(trimmedEmail);
+        setSuccessMessage(
+          'Account created! Please confirm your email address before signing in. Check your Inbox, Spam, or Promotions folder for the Supabase verification link.'
+        );
+      } else {
+        setSuccessMessage('Registration successful! Redirecting to dashboard...');
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 800);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed. Please try again.';
       setFormError(msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!pendingConfirmationEmail) return;
+    setResendMessage(null);
+    setFormError(null);
+    try {
+      setIsResending(true);
+      await resendConfirmationEmail(pendingConfirmationEmail);
+      setResendMessage(
+        'Confirmation email resent! Please check your Inbox and Spam folder. (Note: Supabase built-in email has strict hourly rate limits.)'
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to resend confirmation email.';
+      setFormError(msg);
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -66,6 +108,13 @@ export const RegisterPage: React.FC = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow-sm border border-gray-200 sm:rounded-lg sm:px-10">
+          {!configStatus.isValid && configStatus.error && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md flex items-start gap-2 text-amber-800 text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{configStatus.error}</span>
+            </div>
+          )}
+
           {formError && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2 text-red-700 text-sm">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -74,9 +123,30 @@ export const RegisterPage: React.FC = () => {
           )}
 
           {successMessage && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md flex items-start gap-2 text-green-700 text-sm">
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md flex items-start gap-2 text-green-800 text-sm">
               <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <span>{successMessage}</span>
+            </div>
+          )}
+
+          {resendMessage && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md flex items-start gap-2 text-blue-800 text-xs">
+              <Mail className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{resendMessage}</span>
+            </div>
+          )}
+
+          {pendingConfirmationEmail && (
+            <div className="mb-4 flex items-center justify-between gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-md">
+              <span className="text-xs text-gray-600">Didn&apos;t receive the email?</span>
+              <button
+                type="button"
+                disabled={isResending}
+                onClick={handleResend}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                {isResending ? 'Sending...' : 'Resend confirmation email'}
+              </button>
             </div>
           )}
 

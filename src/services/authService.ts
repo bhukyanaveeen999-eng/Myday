@@ -1,16 +1,35 @@
 import { supabase } from './supabase';
 import type { Session, User, AuthResponse } from '@supabase/supabase-js';
 
+function getEmailRedirectUrl(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return `${window.location.origin}/login`;
+}
+
 export const authService = {
   async signUp(email: string, password: string): Promise<AuthResponse['data']> {
+    const emailRedirectTo = getEmailRedirectUrl();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: emailRedirectTo ? { emailRedirectTo } : undefined,
     });
     if (error) {
       throw error;
     }
     return data;
+  },
+
+  async resendConfirmationEmail(email: string): Promise<void> {
+    const emailRedirectTo = getEmailRedirectUrl();
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: emailRedirectTo ? { emailRedirectTo } : undefined,
+    });
+    if (error) {
+      throw error;
+    }
   },
 
   async signIn(email: string, password: string): Promise<AuthResponse['data']> {

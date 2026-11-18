@@ -2,12 +2,18 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { authService } from '../services/authService';
 
+export interface SignUpResult {
+  requiresEmailConfirmation: boolean;
+  alreadyRegistered: boolean;
+}
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
   error: string | null;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<SignUpResult>;
+  resendConfirmationEmail: (email: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
@@ -53,12 +59,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string): Promise<SignUpResult> => {
     try {
       setError(null);
-      await authService.signUp(email, password);
+      const data = await authService.signUp(email, password);
+      const alreadyRegistered = Boolean(
+        data.user && (!data.user.identities || data.user.identities.length === 0)
+      );
+      return {
+        requiresEmailConfirmation: !data.session,
+        alreadyRegistered,
+      };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed. Please check your credentials.';
+      setError(msg);
+      throw err;
+    }
+  };
+
+  const resendConfirmationEmail = async (email: string): Promise<void> => {
+    try {
+      setError(null);
+      await authService.resendConfirmationEmail(email);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to resend confirmation email.';
       setError(msg);
       throw err;
     }
@@ -98,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         error,
         signUp,
+        resendConfirmationEmail,
         signIn,
         signOut,
         clearError,

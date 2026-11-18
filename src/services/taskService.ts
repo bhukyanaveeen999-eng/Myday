@@ -1,11 +1,22 @@
 import { supabase } from './supabase';
 import type { Database, Task, CreateTaskInput, UpdateTaskInput, TaskStatus, TaskSummary } from '../types/database.types';
 
+async function requireCurrentUserId(): Promise<string> {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    throw new Error('You must be signed in to access your tasks.');
+  }
+  return user.id;
+}
+
 export const taskService = {
   async getTasks(statusFilter?: TaskStatus | 'all'): Promise<Task[]> {
+    const userId = await requireCurrentUserId();
+
     let query = supabase
       .from('tasks')
       .select('*')
+      .eq('user_id', userId)
       .order('scheduled_at', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
 
@@ -21,10 +32,13 @@ export const taskService = {
   },
 
   async getTaskById(id: string): Promise<Task | null> {
+    const userId = await requireCurrentUserId();
+
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('id', id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (error) {
@@ -34,10 +48,7 @@ export const taskService = {
   },
 
   async createTask(input: CreateTaskInput): Promise<Task> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User must be logged in to create a task.');
-    }
+    const userId = await requireCurrentUserId();
 
     const { data, error } = await supabase
       .from('tasks')
@@ -48,7 +59,7 @@ export const taskService = {
         timezone: input.timezone || 'Asia/Kolkata',
         priority: input.priority || 'medium',
         status: input.status || 'pending',
-        user_id: user.id,
+        user_id: userId,
       })
       .select()
       .single();
@@ -60,6 +71,7 @@ export const taskService = {
   },
 
   async updateTask(id: string, updates: UpdateTaskInput): Promise<Task> {
+    const userId = await requireCurrentUserId();
     const updatePayload: Database['public']['Tables']['tasks']['Update'] = {};
 
     if (updates.title !== undefined) updatePayload.title = updates.title.trim();
@@ -73,6 +85,7 @@ export const taskService = {
       .from('tasks')
       .update(updatePayload)
       .eq('id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -83,10 +96,13 @@ export const taskService = {
   },
 
   async deleteTask(id: string): Promise<void> {
+    const userId = await requireCurrentUserId();
+
     const { error } = await supabase
       .from('tasks')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (error) {
       throw error;
@@ -99,9 +115,12 @@ export const taskService = {
   },
 
   async getTaskSummary(): Promise<TaskSummary> {
+    const userId = await requireCurrentUserId();
+
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*')
+      .eq('user_id', userId)
       .order('scheduled_at', { ascending: true, nullsFirst: false });
 
     if (error) {
@@ -110,19 +129,19 @@ export const taskService = {
 
     const allTasks = (tasks as Task[]) || [];
     const total = allTasks.length;
-    const pending = allTasks.filter(t => t.status === 'pending').length;
-    const completed = allTasks.filter(t => t.status === 'completed').length;
+    const pending = allTasks.filter((t) => t.status === 'pending').length;
+    const completed = allTasks.filter((t) => t.status === 'completed').length;
 
     // Upcoming tasks: pending tasks that have a scheduled date, or upcoming pending tasks
     const nowIso = new Date().toISOString();
     const upcoming = allTasks
-      .filter(t => t.status === 'pending' && t.scheduled_at && t.scheduled_at >= nowIso)
+      .filter((t) => t.status === 'pending' && t.scheduled_at && t.scheduled_at >= nowIso)
       .slice(0, 5);
 
     // If less than 5 upcoming scheduled, include other pending tasks
     if (upcoming.length < 5) {
       const otherPending = allTasks
-        .filter(t => t.status === 'pending' && !upcoming.some(u => u.id === t.id))
+        .filter((t) => t.status === 'pending' && !upcoming.some((u) => u.id === t.id))
         .slice(0, 5 - upcoming.length);
       upcoming.push(...otherPending);
     }

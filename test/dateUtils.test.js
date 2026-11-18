@@ -33,3 +33,4 @@ test('combineDateAndTime produces a valid ISO string', () => {
 test('combineDateAndTime handles empty date by returning null', () => {
   assert.strictEqual(combineDateAndTime('', '14:30'), null);
 });
+

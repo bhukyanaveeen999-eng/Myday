@@ -15,7 +15,7 @@ export interface Database {
       tasks: {
         Row: {
           id: string;
-          user_id: string;
+          user_id: string | null;
           title: string;
           description: string | null;
           scheduled_at: string | null;
@@ -27,7 +27,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          user_id: string;
+          user_id?: string | null;
           title: string;
           description?: string | null;
           scheduled_at?: string | null;
@@ -39,7 +39,7 @@ export interface Database {
         };
         Update: {
           id?: string;
-          user_id?: string;
+          user_id?: string | null;
           title?: string;
           description?: string | null;
           scheduled_at?: string | null;
@@ -61,7 +61,7 @@ export interface Database {
       notes: {
         Row: {
           id: string;
-          user_id: string;
+          user_id: string | null;
           title: string;
           content: string;
           created_at: string;
@@ -69,7 +69,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          user_id: string;
+          user_id?: string | null;
           title?: string;
           content?: string;
           created_at?: string;
@@ -77,7 +77,7 @@ export interface Database {
         };
         Update: {
           id?: string;
-          user_id?: string;
+          user_id?: string | null;
           title?: string;
           content?: string;
           created_at?: string;
@@ -119,3 +119,4 @@ export interface TaskSummary {
   completed: number;
   upcoming: Task[];
 }
+

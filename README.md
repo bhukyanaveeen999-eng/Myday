@@ -33,7 +33,7 @@ MyDay is a clean, minimal, responsive personal productivity and task scheduling 
 
 ## 2. Technology Stack
 
-- **Frontend**: React 18, Vite 6, TypeScript 5, Tailwind CSS 3, React Router 6, Lucide React
+- **Frontend**: React 18, Vite 6, TypeScript 5, Tailwind CSS 4 (`@tailwindcss/vite`), React Router 7, Lucide React
 - **Backend**: Supabase (PostgreSQL 15, Supabase Auth, Row Level Security)
 - **Database Migrations**: Supabase CLI migration-first workflow
 
@@ -178,3 +178,4 @@ The database and application architecture are decoupled to support future notifi
   - Background notifications via Web Push API, Service Worker, and VAPID keys.
   - Supabase Cron & Edge Functions to trigger push deliveries.
   - Delivery logging table to prevent duplicate notifications.
+
